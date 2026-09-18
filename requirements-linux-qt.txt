@@ -1,0 +1,7 @@
+# Optionnel : backend Qt si GTK+WebKit2 n'est pas disponible sur la machine Linux cible.
+# Sur la plupart des distributions desktop modernes, GTK est déjà présent et
+# ce fichier n'est pas nécessaire : pywebview utilisera python3-gi + webkit2gtk
+# (à installer via le gestionnaire de paquets du système, pas via pip).
+PyQt5
+PyQtWebEngine
+qtpy
