@@ -1,56 +1,68 @@
-name: Build ERP Desktop
+name: Build ERP Desktop (Windows)
 
-# Se déclenche automatiquement à chaque push d'un tag de version (ex: v1.0.0),
-# ou manuellement depuis l'onglet "Actions" de GitHub ("workflow_dispatch").
+# Compile réellement l'exécutable Windows dans le cloud (machine Windows
+# louée par GitHub), sans que vous ayez besoin d'un PC Windows vous-même.
+#
+# Déclenchement :
+# - Automatique à chaque push sur main qui touche erp-desktop/ ou erp_project/
+# - Manuel depuis l'onglet "Actions" du dépôt GitHub (bouton "Run workflow")
+#
+# Résultat : un artefact téléchargeable "ERP-Compta-Logistique-Setup"
+# contenant l'installateur .exe prêt à distribuer, disponible dans
+# l'onglet Actions -> ce run -> section "Artifacts", pendant 90 jours.
+
 on:
   push:
-    tags:
-      - "v*"
-  workflow_dispatch:
+    branches: [main]
+    paths:
+      - "erp-desktop/**"
+      - "erp_project/**"
+      - "erp-frontend/**"
+  workflow_dispatch: {}
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+  build-windows:
+    runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Récupérer le code
+        uses: actions/checkout@v4
 
       - name: Installer Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Installer les dépendances
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+      - name: Installer Node.js (pour builder le frontend)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
-      - name: Installer les dépendances système Linux (GTK + WebKit2)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Builder le frontend React
+        working-directory: erp-frontend
         run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-gi gir1.2-webkit2-4.1 libgirepository1.0-dev
+          npm ci
+          npm run build
 
-      - name: Générer l'exécutable
+      - name: Installer les dépendances Python du shell desktop
+        working-directory: erp-desktop
+        run: pip install -r requirements.txt
+
+      - name: Compiler l'exécutable (PyInstaller, --onedir)
+        working-directory: erp-desktop
         run: python build.py
 
-      - name: Renommer l'artefact selon la plateforme
-        shell: bash
-        run: |
-          mkdir -p artefact
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp dist/ERP-Compta-Logistique.exe artefact/ERP-Compta-Logistique-Windows.exe
-          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
-            cp dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-macOS
-          else
-            cp dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-Linux
-          fi
+      - name: Installer Inno Setup
+        run: choco install innosetup -y
 
-      - name: Publier l'exécutable
+      - name: Compiler l'installateur .exe final
+        working-directory: erp-desktop/installer
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" setup.iss
+
+      - name: Publier l'installateur comme artefact téléchargeable
         uses: actions/upload-artifact@v4
         with:
-          name: erp-desktop-${{ matrix.os }}
-          path: artefact/*
+          name: ERP-Compta-Logistique-Setup
+          path: erp-desktop/installer_output/*.exe
+          retention-days: 90
