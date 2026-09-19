@@ -1,8 +1,23 @@
 name: Build ERP Desktop (Windows)
 
+# Compile réellement l'exécutable Windows dans le cloud (machine Windows
+# louée par GitHub), sans que vous ayez besoin d'un PC Windows vous-même.
+#
+# Déclenchement :
+# - Automatique à chaque push sur main qui touche erp-desktop/ ou erp_project/
+# - Manuel depuis l'onglet "Actions" du dépôt GitHub (bouton "Run workflow")
+#
+# Résultat : un artefact téléchargeable "ERP-Compta-Logistique-Setup"
+# contenant l'installateur .exe prêt à distribuer, disponible dans
+# l'onglet Actions -> ce run -> section "Artifacts", pendant 90 jours.
+
 on:
   push:
     branches: [main]
+    paths:
+      - "erp-desktop/**"
+      - "erp_project/**"
+      - "erp-frontend/**"
   workflow_dispatch: {}
 
 jobs:
@@ -10,24 +25,8 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Récupérer erp-desktop (ce dépôt)
+      - name: Récupérer le code
         uses: actions/checkout@v4
-        with:
-          path: erp-desktop
-
-      - name: Récupérer le backend (erp_project)
-        uses: actions/checkout@v4
-        with:
-          repository: Mrmara32/erp-louba-backend
-          token: ${{ secrets.TOKEN_AUTRES_DEPOTS }}
-          path: erp_project
-
-      - name: Récupérer le frontend (erp-frontend)
-        uses: actions/checkout@v4
-        with:
-          repository: Mrmara32/erp-louba-frontend
-          token: ${{ secrets.TOKEN_AUTRES_DEPOTS }}
-          path: erp-frontend
 
       - name: Installer Python
         uses: actions/setup-python@v5
