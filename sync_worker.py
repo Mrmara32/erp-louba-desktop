@@ -69,12 +69,80 @@ def _entetes():
     return {"Authorization": f"Bearer {token}"} if token else {}
 
 
+def _renouveler_plages_numeros(serveur_url, django_local_url, device_id, entetes):
+    """
+    Étape "100% hors-ligne" : tant qu'une connexion est disponible, demande
+    au poste local ce qui a besoin d'être renouvelé (plages de numéros
+    bientôt épuisées ou jamais réservées), réserve les blocs correspondants
+    auprès du serveur central, puis les enregistre localement. C'est ce qui
+    permet ensuite au poste d'attribuer des numéros réels et définitifs
+    même totalement hors connexion (voir societes/sequences.py côté
+    backend).
+
+    N'interrompt jamais la synchro documentaire/référentiel en cas d'échec :
+    une erreur ici est journalisée et retentée au prochain cycle, le poste
+    continue simplement à utiliser des numéros provisoires "OFF-" en
+    attendant.
+    """
+    try:
+        etat = requests.get(
+            f"{django_local_url}/api/synchro/plages-locales/", headers=entetes, timeout=10
+        )
+        etat.raise_for_status()
+        a_renouveler = etat.json().get("plages_a_renouveler", [])
+    except requests.RequestException as e:
+        print(f"[synchro] Impossible de lire l'état des plages locales : {e}")
+        return
+
+    for entree in a_renouveler:
+        societe_id = entree["societe_id"]
+        for besoin in entree.get("besoins", []):
+            try:
+                reservation = requests.post(
+                    f"{serveur_url}/api/synchro/reserver-plage/",
+                    json={
+                        "device_id": device_id,
+                        "societe": societe_id,
+                        "prefixe": besoin["prefixe"],
+                        "largeur": besoin["largeur"],
+                    },
+                    headers=entetes,
+                    timeout=15,
+                )
+                reservation.raise_for_status()
+                plage = reservation.json()
+
+                enregistrement = requests.post(
+                    f"{django_local_url}/api/synchro/enregistrer-plage/",
+                    json={
+                        "societe_id": societe_id,
+                        "device_id": device_id,
+                        "prefixe": plage["prefixe"],
+                        "largeur": plage["largeur"],
+                        "numero_debut": plage["numero_debut"],
+                        "numero_fin": plage["numero_fin"],
+                    },
+                    headers=entetes,
+                    timeout=10,
+                )
+                enregistrement.raise_for_status()
+                print(
+                    f"[synchro] Plage réservée pour {besoin['prefixe']} "
+                    f"({entree['societe_code']}) : {plage['numero_debut']}-{plage['numero_fin']}."
+                )
+            except requests.RequestException as e:
+                print(f"[synchro] Échec de réservation de plage pour {besoin['prefixe']} : {e}")
+
+
 def synchroniser_une_fois(serveur_url, django_local_url, device_id):
     """
     1. Interroge la base locale (via l'API Django locale elle-même, pas
        directement SQLite) pour la liste des documents non synchronisés.
     2. Les pousse vers le serveur central.
     3. Tire les mises à jour du référentiel depuis le serveur.
+    4. Renouvelle les plages de numéros réservées, si nécessaire, pour que
+       le poste reste capable d'attribuer des numéros définitifs même
+       lorsqu'il repassera hors-ligne (voir _renouveler_plages_numeros).
     Toute erreur est journalisée mais ne fait jamais planter l'application —
     la synchro réessaiera au prochain cycle.
     """
@@ -124,6 +192,11 @@ def synchroniser_une_fois(serveur_url, django_local_url, device_id):
 
     except requests.RequestException as e:
         print(f"[synchro] Échec de synchronisation, nouvelle tentative dans {INTERVALLE_SECONDES}s : {e}")
+        return
+
+    # 4. Renouvellement des plages de numéros (indépendant du bloc ci-dessus :
+    # un échec ici ne doit pas être traité comme un échec de synchro globale).
+    _renouveler_plages_numeros(serveur_url, django_local_url, device_id, entetes)
 
 
 def demarrer_boucle_synchro(serveur_url, django_local_url, device_id):
