@@ -17,23 +17,63 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      # 1) Le dépôt de l'application desktop elle-même (ce dépôt), placé
+      #    dans un sous-dossier "erp-desktop" pour que build.py trouve ses
+      #    "voisins" erp_project/ et erp-frontend/ juste à côté, exactement
+      #    comme sur le PC de Mara.
+      - name: Récupérer erp-desktop (ce dépôt)
+        uses: actions/checkout@v4
+        with:
+          path: erp-desktop
+
+      # 2) Le backend Django (dépôt PRIVÉ) -> copié dans "erp_project"
+      - name: Récupérer erp_project (backend Django)
+        uses: actions/checkout@v4
+        with:
+          repository: Mrmara32/erp-louba-backend
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+          path: erp_project
+
+      # 3) Le frontend React (dépôt PRIVÉ) -> copié dans "erp-frontend"
+      - name: Récupérer erp-frontend (frontend React)
+        uses: actions/checkout@v4
+        with:
+          repository: Mrmara32/erp-louba-frontend
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+          path: erp-frontend
 
       - name: Installer Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Installer les dépendances
+      - name: Installer les dépendances Python (build)
+        working-directory: erp-desktop
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
       - name: Installer les dépendances système Linux (GTK + WebKit2)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y python3-gi gir1.2-webkit2-4.1 libgirepository1.0-dev
+
+      # 4) Compiler le frontend React -> produit erp-frontend/dist/, que
+      #    build.py copiera ensuite dans le paquet final.
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Compiler le frontend React
+        working-directory: erp-frontend
+        run: |
+          npm install
+          npm run build
+
       - name: Générer l'exécutable
+        working-directory: erp-desktop
         run: python build.py
 
       - name: Renommer l'artefact selon la plateforme
@@ -41,12 +81,13 @@ jobs:
         run: |
           mkdir -p artefact
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp -r dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-Windows
+            cp -r erp-desktop/dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-Windows
           elif [ "${{ matrix.os }}" = "macos-latest" ]; then
-            cp -r dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-macOS
+            cp -r erp-desktop/dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-macOS
           else
-            cp -r dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-Linux
+            cp -r erp-desktop/dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-Linux
           fi
+
       - name: Publier l'exécutable
         uses: actions/upload-artifact@v4
         with:
