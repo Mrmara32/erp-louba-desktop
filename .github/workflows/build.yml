@@ -41,7 +41,7 @@ jobs:
         run: |
           mkdir -p artefact
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp dist/ERP-Compta-Logistique.exe artefact/ERP-Compta-Logistique-Windows.exe
+            cp -r dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-Windows
           elif [ "${{ matrix.os }}" = "macos-latest" ]; then
             cp -r dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-macOS
           else
