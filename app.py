@@ -398,6 +398,19 @@ def main():
         print("[mode] Démarrage du serveur local en tâche de fond (pour la synchronisation)...")
         demarrer_django_local(host="127.0.0.1")
 
+        # CORRECTIF N°4 : sync_worker.py lit le token via la variable
+        # d'environnement ERP_TOKEN_PATH, positionnée comme simple effet de
+        # bord de _chemin_token() (voir plus haut). Mais rien dans ce Mode 2
+        # n'appelait jamais cette fonction : si l'utilisateur était DÉJÀ
+        # connecté (token encore valide dans le localStorage du navigateur
+        # embarqué, donc Api.enregistrer_token jamais rappelé cette session),
+        # la variable d'environnement restait vide et le worker de synchro
+        # ne pouvait JAMAIS s'authentifier -- "Aucun token disponible" en
+        # boucle, la base locale ne se remplissait donc jamais, même après
+        # des heures en ligne : c'était la vraie cause de l'échec
+        # systématique de la connexion hors ligne.
+        _charger_token_local()
+
         from sync_worker import demarrer_boucle_synchro
         demarrer_boucle_synchro(config["serveur_backend"], DJANGO_LOCAL_URL, _device_id(config))
         webview.start()
