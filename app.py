@@ -312,6 +312,65 @@ class Api:
             return {"ok": False, "detail": f"Échec de la synchronisation : {e}"}
         return {"ok": True}
 
+    def nom_utilisateur_windows(self):
+        """
+        Pour l'assistant de premier démarrage (PremierDemarragePage.jsx,
+        option "Utiliser le compte Windows de ce poste") : renvoie le nom de
+        la session Windows/OS courante, pour pré-remplir le champ nom
+        d'utilisateur. Ne renvoie jamais d'erreur -- une chaîne vide laisse
+        simplement le champ à remplir manuellement.
+        """
+        import getpass
+        try:
+            return getpass.getuser()
+        except Exception:
+            return ""
+
+    def valider_compte_central(self, identifiant, mot_de_passe):
+        """
+        Pour l'assistant de premier démarrage, option "Rattacher un compte
+        existant" : vérifie les identifiants directement auprès du serveur
+        central (Render) depuis Python -- et non depuis le frontend --
+        pour éviter tout problème de CORS lorsque la page est servie
+        localement (127.0.0.1:8813 en hors-ligne). Renvoie le profil complet
+        si valide ; le frontend s'en sert ensuite pour créer la copie locale
+        de ce compte (voir demarrage/views.py côté Django local).
+        """
+        import requests
+        if not internet_disponible(self.config["serveur_backend"]):
+            return {"ok": False, "detail": "Aucune connexion internet détectée."}
+        try:
+            reponse = requests.post(
+                f"{self.config['serveur_backend']}/api/auth/token/",
+                json={"username": identifiant, "password": mot_de_passe},
+                timeout=10,
+            )
+            if reponse.status_code != 200:
+                return {"ok": False, "detail": "Identifiant ou mot de passe incorrect."}
+            access = reponse.json().get("access")
+            profil = requests.get(
+                f"{self.config['serveur_backend']}/api/utilisateurs/me/",
+                headers={"Authorization": f"Bearer {access}"},
+                timeout=10,
+            )
+            profil.raise_for_status()
+            donnees_profil = profil.json()
+            societe_nom = ""
+            try:
+                societe = requests.get(
+                    f"{self.config['serveur_backend']}/api/entreprise/",
+                    headers={"Authorization": f"Bearer {access}"},
+                    timeout=10,
+                )
+                if societe.status_code == 200:
+                    societe_nom = societe.json().get("nom", "")
+            except requests.RequestException:
+                pass
+            donnees_profil["societe_nom"] = societe_nom
+            return {"ok": True, "profil": donnees_profil}
+        except requests.RequestException as e:
+            return {"ok": False, "detail": f"Connexion au serveur impossible : {e}"}
+
 
 def creer_fenetre(config, titre=None, url=None):
     return webview.create_window(
