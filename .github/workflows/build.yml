@@ -76,6 +76,50 @@ jobs:
         working-directory: erp-desktop
         run: python build.py
 
+      # Equivalent macOS de l'installeur Inno Setup (Windows) : Inno Setup
+      # est un outil strictement Windows, il n'existe aucune version macOS.
+      # Sur Mac, l'installeur "classique" est une image disque .dmg qui
+      # s'ouvre sur une fenêtre avec l'app et un raccourci vers /Applications
+      # (glisser-déposer pour installer). hdiutil est l'outil natif macOS
+      # pour fabriquer ce .dmg, déjà présent sur les runners macos-latest
+      # (rien à installer).
+      - name: Créer l'image disque .dmg (macOS)
+        if: matrix.os == 'macos-latest'
+        working-directory: erp-desktop
+        run: |
+          set -e
+          APP_SRC="dist/ERP-Compta-Logistique"
+          STAGING="dmg_staging"
+          DMG_NAME="ERP-Compta-Logistique-Setup.dmg"
+          VOLUME_NAME="ERP Compta et Logistique"
+
+          mkdir -p installer_output
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING"
+
+          if [ -d "$APP_SRC/ERP-Compta-Logistique.app" ]; then
+            # PyInstaller --windowed (mode fenêtré, pas encore réactivé tant
+            # qu'on corrige des bugs via la console) produit un vrai bundle
+            # .app ici -- c'est lui qu'on embarque.
+            cp -R "$APP_SRC/ERP-Compta-Logistique.app" "$STAGING/"
+          else
+            # Tant que --windowed reste désactivé (voir build.py), PyInstaller
+            # ne produit qu'un dossier onedir classique, pas un bundle .app :
+            # on l'embarque tel quel. A remplacer automatiquement par le vrai
+            # .app dès que --windowed sera réactivé, sans toucher ce script.
+            cp -R "$APP_SRC" "$STAGING/ERP-Compta-Logistique"
+          fi
+
+          # Raccourci vers /Applications pour le glisser-déposer classique macOS
+          ln -s /Applications "$STAGING/Applications"
+
+          hdiutil create -volname "$VOLUME_NAME" \
+            -srcfolder "$STAGING" \
+            -ov -format UDZO \
+            "installer_output/$DMG_NAME"
+
+          rm -rf "$STAGING"
+
       - name: Renommer l'artefact selon la plateforme
         shell: bash
         run: |
@@ -84,6 +128,7 @@ jobs:
             cp -r erp-desktop/dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-Windows
           elif [ "${{ matrix.os }}" = "macos-latest" ]; then
             cp -r erp-desktop/dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-macOS
+            cp erp-desktop/installer_output/ERP-Compta-Logistique-Setup.dmg artefact/ERP-Compta-Logistique-Setup.dmg
           else
             cp -r erp-desktop/dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-Linux
           fi
