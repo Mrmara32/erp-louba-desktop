@@ -1,6 +1,7 @@
 ; Script Inno Setup pour l'ERP Compta & Logistique.
 ; Compiler ce fichier avec Inno Setup Compiler (ISCC.exe ou l'interface graphique)
-; APRÈS avoir généré dist\ERP-Compta-Logistique.exe via "python build.py".
+; APRÈS avoir généré dist\ERP-Compta-Logistique\ (dossier --onedir complet)
+; via "python build.py".
 ;
 ; Résultat : installer_output\ERP-Compta-Logistique-Setup.exe
 ; C'est CE fichier-là qu'on distribue aux utilisateurs finaux — un simple
@@ -10,6 +11,10 @@
 #define MyAppName "ERP Compta & Logistique"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "Louba Restaurant"
+; Nom du DOSSIER onedir genere par build.py (dist\ERP-Compta-Logistique\),
+; qui contient l'exe ET toutes ses dependances (DLL, erp_project/, etc.) --
+; voir NOM_APP dans build.py.
+#define MyAppFolderName "ERP-Compta-Logistique"
 #define MyAppExeName "ERP-Compta-Logistique.exe"
 
 [Setup]
@@ -37,8 +42,14 @@ Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 Name: "desktopicon"; Description: "Créer une icône sur le Bureau"; GroupDescription: "Icônes supplémentaires :"
 
 [Files]
-; L'exécutable généré par PyInstaller (build.py)
-Source: "..\dist\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; build.py utilise PyInstaller --onedir (pas --onefile) : l'exécutable ne
+; peut PAS tourner seul, il a besoin du dossier complet généré à côté de lui
+; (DLL/bibliothèques Python embarquées + erp_project/ avec le backend Django
+; et le frontend React copiés dedans par build.py). On embarque donc tout le
+; dossier "..\dist\ERP-Compta-Logistique\", pas le seul .exe — une version
+; précédente de ce script ne copiait que l'exe (reliquat de l'époque
+; --onefile) : l'installeur produit était cassé (backend/frontend absents).
+Source: "..\dist\{#MyAppFolderName}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirdirs
 
 ; config.json : "onlyifdoesntexist" est important — si l'utilisateur a déjà
 ; personnalisé son URL de serveur lors d'une installation précédente, une

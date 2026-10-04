@@ -120,12 +120,26 @@ jobs:
 
           rm -rf "$STAGING"
 
+      # Equivalent Windows du .dmg macOS ci-dessus : ISCC.exe (Inno Setup
+      # Compiler) est préinstallé sur les runners windows-latest de GitHub,
+      # rien à installer. Compile installer\setup.iss -> produit
+      # installer_output\ERP-Compta-Logistique-Setup.exe, l'installeur
+      # classique (raccourcis Bureau/Menu Démarrer, désinstallation propre)
+      # à distribuer aux utilisateurs finaux à la place du dossier dist\ brut.
+      - name: Créer l'installeur .exe avec Inno Setup (Windows)
+        if: matrix.os == 'windows-latest'
+        working-directory: erp-desktop
+        shell: cmd
+        run: |
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\setup.iss
+
       - name: Renommer l'artefact selon la plateforme
         shell: bash
         run: |
           mkdir -p artefact
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             cp -r erp-desktop/dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-Windows
+            cp erp-desktop/installer_output/ERP-Compta-Logistique-Setup.exe artefact/ERP-Compta-Logistique-Setup.exe
           elif [ "${{ matrix.os }}" = "macos-latest" ]; then
             cp -r erp-desktop/dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-macOS
             cp erp-desktop/installer_output/ERP-Compta-Logistique-Setup.dmg artefact/ERP-Compta-Logistique-Setup.dmg
