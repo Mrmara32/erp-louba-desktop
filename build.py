@@ -57,6 +57,25 @@ HIDDEN_IMPORTS = [
     "societes", "utilisateurs", "comptes", "journaux", "logistique",
     "tresorerie", "etats", "notifications", "entreprise", "licences",
     "paie", "demandes", "ventes", "stocks", "synchro",
+    # assistant_ia manquait ici : comme toute app listée dans INSTALLED_APPS,
+    # Django l'importe au démarrage (apps.populate()), AVANT que la moindre
+    # route ne soit appelée -- son absence ne casse pas que l'assistant,
+    # elle empêche l'application ENTIÈRE de démarrer
+    # ("ModuleNotFoundError: No module named 'assistant_ia'").
+    "assistant_ia",
+    # pyotp/qrcode (2FA) : utilisés par utilisateurs/auth_views.py, mêmes
+    # symptômes que les autres imports dynamiques de cette liste si absents.
+    "pyotp", "qrcode",
+    # Fournisseurs d'IA de assistant_ia/views.py : importés dynamiquement
+    # (import local dans chaque fonction _repondre_avec_xxx) donc invisibles
+    # à l'analyse statique de PyInstaller. google.generativeai n'est volontai-
+    # rement PAS ajouté ici : c'est un paquet lourd (dépendances grpc/protobuf)
+    # qui pose régulièrement problème avec PyInstaller et qui n'est de toute
+    # façon qu'une option parmi trois (voir FOURNISSEURS) -- Groq passe par
+    # "requests", déjà embarqué ; seul anthropic (léger) est embarqué ici pour
+    # que le mode hors-ligne du poste ait une vraie option IA fonctionnelle
+    # dès que GROQ_API_KEY ou ANTHROPIC_API_KEY est configurée côté serveur.
+    "anthropic",
     # Dépendances Django tierces utilisées via chaînes dans settings.py
     "rest_framework", "rest_framework_simplejwt", "corsheaders",
     "django_filters", "whitenoise", "dj_database_url",
@@ -124,6 +143,13 @@ COLLECT_SUBMODULES = [
     # openpyxl (export Excel des releves de compte) a le meme genre de
     # sous-imports dynamiques que reportlab/PIL ci-dessus.
     "openpyxl",
+    # qrcode (QR code du secret 2FA) a le meme genre de sous-imports
+    # dynamiques (qrcode.image.pil, etc.) que les paquets ci-dessus.
+    "qrcode",
+    # anthropic (Assistant IA) : paquet avec de nombreux sous-modules
+    # (anthropic.types, anthropic._client, ...) importés dynamiquement par
+    # le SDK lui-même, non détectés par l'analyse statique de PyInstaller.
+    "anthropic",
 ]
 
 DOSSIERS_A_EXCLURE = {"__pycache__", "migrations_backup", ".git"}
