@@ -182,12 +182,17 @@ def synchroniser_une_fois(serveur_url, django_local_url, device_id):
             f"{serveur_url}/api/synchro/pull-referentiel/", headers=entetes, timeout=30
         )
         pull.raise_for_status()
-        requests.post(
+        importer = requests.post(
             f"{django_local_url}/api/synchro/importer-referentiel/",
             json=pull.json(),
             headers=entetes,
             timeout=30,
         )
+        # IMPORTANT : sans ce raise_for_status(), un 500 cote local (ex.
+        # ValueError sur un champ FK du référentiel) était silencieusement
+        # ignoré et "[synchro] Référentiel à jour." s'affichait quand même,
+        # masquant l'échec réel de l'import.
+        importer.raise_for_status()
         print("[synchro] Référentiel à jour.")
 
     except requests.RequestException as e:
