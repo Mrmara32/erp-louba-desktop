@@ -123,6 +123,7 @@ DEFAULT_CONFIG = {
 }
 
 _compteur_fenetres = 0
+MAX_FENETRES = 8   # nombre maximal de fenêtres ouvertes en même temps
 
 
 def charger_config():
@@ -257,12 +258,38 @@ class Api:
     def __init__(self, config):
         self.config = config
 
-    def nouvelle_fenetre(self):
+    def nouvelle_fenetre(self, url=None):
+        """
+        Ouvre une nouvelle fenêtre indépendante de l'application. `url` (facultative) est la page à y afficher ;
+        elle n'est acceptée que si elle pointe vers le même serveur que la fenêtre d'origine (en ligne, serveur local
+        ou poste voisin) -- jamais vers un site quelconque. Les fenêtres partagent la même session de connexion.
+        """
         global _compteur_fenetres
+        if _compteur_fenetres + 1 >= MAX_FENETRES:
+            return False
+        cible = self._url_autorisee(url) or self.config["url"]
         _compteur_fenetres += 1
         titre = f"{self.config['title']} — Fenêtre {_compteur_fenetres + 1}"
-        creer_fenetre(self.config, titre)
+        creer_fenetre(self.config, titre, url=_url_avec_token(cible, _charger_token_local()))
         return True
+
+    def _url_autorisee(self, url):
+        if not url or not isinstance(url, str):
+            return None
+        from urllib.parse import urlparse
+        try:
+            demande = urlparse(url)
+            if demande.scheme not in ("http", "https") or not demande.hostname:
+                return None
+            autorises = {"127.0.0.1", "localhost"}
+            for base in (self.config.get("url"), self.config.get("serveur_local_url"), DJANGO_LOCAL_URL):
+                if base:
+                    h = urlparse(base).hostname
+                    if h:
+                        autorises.add(h)
+            return url if demande.hostname in autorises else None
+        except ValueError:
+            return None
 
     def enregistrer_token(self, access=None, refresh=None):
         donnees = _charger_token_local() or {}
