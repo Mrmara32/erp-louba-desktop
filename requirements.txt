@@ -21,6 +21,12 @@ PyJWT==2.13.0
 # pas l'inclure évite d'alourdir l'exécutable et ses dépendances système.
 pyotp==2.10.0
 qrcode==8.2
+# cryptography : importé au chargement par licences/validation_offline.py
+# (signature des clés de licence) et par entreprise/secret.py (mot de passe
+# e-mail chiffré). licences/views.py en dépend, donc config/urls.py aussi :
+# sans ce paquet, TOUTES les requêtes au serveur local répondent 500
+# (synchro et mode hors ligne inutilisables). Même version que le backend.
+cryptography==49.0.0
 # anthropic : un des 3 fournisseurs IA possibles de assistant_ia/views.py
 # (voir FOURNISSEURS) -- importé seulement au moment de l'appel (pas au
 # démarrage), mais nécessaire pour que l'Assistant IA utilise réellement

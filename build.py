@@ -150,6 +150,12 @@ COLLECT_SUBMODULES = [
     # (anthropic.types, anthropic._client, ...) importés dynamiquement par
     # le SDK lui-même, non détectés par l'analyse statique de PyInstaller.
     "anthropic",
+    # cryptography : importé par licences/validation_offline.py (au chargement
+    # de licences/views.py, donc de toutes les URL) et entreprise/secret.py.
+    # erp_project/ est copié en source à côté de l'exe : PyInstaller n'en voit
+    # aucun import, il faut donc embarquer le paquet explicitement -- sinon le
+    # serveur local répond 500 partout ("No module named 'cryptography'").
+    "cryptography",
 ]
 
 DOSSIERS_A_EXCLURE = {"__pycache__", "migrations_backup", ".git"}
