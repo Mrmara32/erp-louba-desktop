@@ -49,7 +49,7 @@ Name: "desktopicon"; Description: "Créer une icône sur le Bureau"; GroupDescri
 ; dossier "..\dist\ERP-Compta-Logistique\", pas le seul .exe — une version
 ; précédente de ce script ne copiait que l'exe (reliquat de l'époque
 ; --onefile) : l'installeur produit était cassé (backend/frontend absents).
-Source: "..\dist\{#MyAppFolderName}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirdirs
+Source: "..\dist\{#MyAppFolderName}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; config.json : "onlyifdoesntexist" est important — si l'utilisateur a déjà
 ; personnalisé son URL de serveur lors d'une installation précédente, une

@@ -432,6 +432,48 @@ def _url_avec_token(url_base, token):
     return f"{url_base}{separateur}{urlencode(parametres)}"
 
 
+def _preparer_hors_ligne_en_arriere_plan(config):
+    """
+    Mode 2 (en ligne) : démarre le serveur Django local puis le worker de
+    synchronisation, dans un thread à part, pendant que la fenêtre affiche
+    Render.
+
+    Auparavant ce travail se faisait AVANT webview.start() : la fenêtre
+    n'apparaissait qu'une fois la base locale mise à jour (plusieurs dizaines
+    de secondes au premier lancement d'une nouvelle version, le temps des
+    migrations), et la moindre erreur locale (base verrouillée ou abîmée,
+    migration impossible, module manquant) faisait planter l'application
+    ENTIÈRE -- alors que le travail en ligne n'a pas besoin de la base locale.
+    Désormais une erreur ici suspend seulement la préparation du mode hors
+    ligne pour cette session ; la fenêtre en ligne reste utilisable.
+    """
+    try:
+        print("[mode] Démarrage du serveur local en tâche de fond (pour la synchronisation)...")
+        demarrer_django_local(host="127.0.0.1")
+
+        # CORRECTIF N°4 : sync_worker.py lit le token via la variable
+        # d'environnement ERP_TOKEN_PATH, positionnée comme simple effet de
+        # bord de _chemin_token() (voir plus haut). Mais rien dans ce Mode 2
+        # n'appelait jamais cette fonction : si l'utilisateur était DÉJÀ
+        # connecté (token encore valide dans le localStorage du navigateur
+        # embarqué, donc Api.enregistrer_token jamais rappelé cette session),
+        # la variable d'environnement restait vide et le worker de synchro
+        # ne pouvait JAMAIS s'authentifier -- "Aucun token disponible" en
+        # boucle, la base locale ne se remplissait donc jamais, même après
+        # des heures en ligne : c'était la vraie cause de l'échec
+        # systématique de la connexion hors ligne.
+        _charger_token_local()
+
+        from sync_worker import demarrer_boucle_synchro
+        demarrer_boucle_synchro(config["serveur_backend"], DJANGO_LOCAL_URL, _device_id(config))
+        print("[mode] Serveur local et synchronisation démarrés.")
+    except Exception:
+        import traceback
+        print("[mode] Serveur local indisponible : l'application continue EN LIGNE, "
+              "mais le mode hors ligne n'est pas préparé pendant cette session.")
+        traceback.print_exc()
+
+
 def main():
     config = charger_config()
     type_installation = config.get("type_installation", "complete")
@@ -481,24 +523,12 @@ def main():
         # continue de pointer vers Render, seul un serveur en tâche de fond
         # démarre en plus, sur 127.0.0.1 uniquement (jamais exposé au
         # réseau local ici — ce n'est pas le rôle "serveur_local").
-        print("[mode] Démarrage du serveur local en tâche de fond (pour la synchronisation)...")
-        demarrer_django_local(host="127.0.0.1")
-
-        # CORRECTIF N°4 : sync_worker.py lit le token via la variable
-        # d'environnement ERP_TOKEN_PATH, positionnée comme simple effet de
-        # bord de _chemin_token() (voir plus haut). Mais rien dans ce Mode 2
-        # n'appelait jamais cette fonction : si l'utilisateur était DÉJÀ
-        # connecté (token encore valide dans le localStorage du navigateur
-        # embarqué, donc Api.enregistrer_token jamais rappelé cette session),
-        # la variable d'environnement restait vide et le worker de synchro
-        # ne pouvait JAMAIS s'authentifier -- "Aucun token disponible" en
-        # boucle, la base locale ne se remplissait donc jamais, même après
-        # des heures en ligne : c'était la vraie cause de l'échec
-        # systématique de la connexion hors ligne.
-        _charger_token_local()
-
-        from sync_worker import demarrer_boucle_synchro
-        demarrer_boucle_synchro(config["serveur_backend"], DJANGO_LOCAL_URL, _device_id(config))
+        # Lancé dans un thread (voir _preparer_hors_ligne_en_arriere_plan) :
+        # la fenêtre en ligne s'ouvre tout de suite et ne dépend jamais de la
+        # base locale.
+        threading.Thread(
+            target=_preparer_hors_ligne_en_arriere_plan, args=(config,), daemon=True
+        ).start()
         webview.start()
         return
 

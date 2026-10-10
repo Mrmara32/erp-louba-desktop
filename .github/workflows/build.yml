@@ -7,6 +7,14 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      cle_publique_livraison:
+        description: >-
+          Facultatif : clé publique RSA (PEM encodé en base64, une seule ligne).
+          Si renseignée, le build Windows est aussi déposé CHIFFRÉ avec cette clé
+          sur une branche temporaire livraison/windows-<run> (job "livraison").
+        required: false
+        default: ""
 
 jobs:
   build:
@@ -126,12 +134,30 @@ jobs:
       # installer_output\ERP-Compta-Logistique-Setup.exe, l'installeur
       # classique (raccourcis Bureau/Menu Démarrer, désinstallation propre)
       # à distribuer aux utilisateurs finaux à la place du dossier dist\ brut.
+      #
+      # continue-on-error : un échec de l'installeur ne doit pas priver de
+      # l'application elle-même (dossier dist\ERP-Compta-Logistique, publié
+      # quoi qu'il arrive à l'étape suivante). Les dernières lignes d'ISCC
+      # sont remontées en annotation d'erreur, lisibles sans ouvrir les logs.
       - name: Créer l'installeur .exe avec Inno Setup (Windows)
         if: matrix.os == 'windows-latest'
+        continue-on-error: true
         working-directory: erp-desktop
-        shell: cmd
+        shell: pwsh
         run: |
-          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\setup.iss
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            $trouve = Get-ChildItem "C:\Program Files*\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($trouve) { $iscc = $trouve.FullName } else { Write-Output "::error title=Inno Setup::ISCC.exe introuvable sur ce runner"; exit 1 }
+          }
+          & $iscc installer\setup.iss *>&1 | Tee-Object -FilePath iscc.log
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            $fin = (Get-Content iscc.log -Tail 30) -join "`n"
+            $fin = $fin.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Inno Setup (code $code)::$fin"
+            exit $code
+          }
 
       - name: Renommer l'artefact selon la plateforme
         shell: bash
@@ -139,7 +165,9 @@ jobs:
           mkdir -p artefact
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             cp -r erp-desktop/dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-Windows
-            cp erp-desktop/installer_output/ERP-Compta-Logistique-Setup.exe artefact/ERP-Compta-Logistique-Setup.exe
+            if [ -f erp-desktop/installer_output/ERP-Compta-Logistique-Setup.exe ]; then
+              cp erp-desktop/installer_output/ERP-Compta-Logistique-Setup.exe artefact/ERP-Compta-Logistique-Setup.exe
+            fi
           elif [ "${{ matrix.os }}" = "macos-latest" ]; then
             cp -r erp-desktop/dist/ERP-Compta-Logistique artefact/ERP-Compta-Logistique-macOS
             cp erp-desktop/installer_output/ERP-Compta-Logistique-Setup.dmg artefact/ERP-Compta-Logistique-Setup.dmg
@@ -152,3 +180,58 @@ jobs:
         with:
           name: erp-desktop-${{ matrix.os }}
           path: artefact/*
+
+  # Livraison chiffrée du build Windows, uniquement sur demande (champ
+  # cle_publique_livraison du lancement manuel). Sert quand l'onglet Artifacts
+  # n'est pas accessible depuis l'endroit où l'on récupère le build. Ce dépôt
+  # étant PUBLIC et le build contenant le backend (dépôt privé), rien n'est
+  # jamais poussé en clair : archive chiffrée en AES-256 avec une clé
+  # aléatoire, elle-même chiffrée avec la clé publique RSA fournie -- seul le
+  # détenteur de la clé privée correspondante peut l'ouvrir. La branche
+  # livraison/windows-<run> est à supprimer une fois récupérée.
+  # Job séparé : seul lui a le droit d'écrire dans le dépôt (le job de build,
+  # qui exécute npm install / pip install, reste en lecture seule).
+  livraison:
+    needs: build
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.cle_publique_livraison != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Récupérer le build Windows
+        uses: actions/download-artifact@v4
+        with:
+          name: erp-desktop-windows-latest
+          path: windows
+
+      - name: Chiffrer et déposer sur une branche temporaire
+        env:
+          CLE_PUBLIQUE_B64: ${{ inputs.cle_publique_livraison }}
+          JETON: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p paquet livraison
+          mv windows/ERP-Compta-Logistique-Windows paquet/ERP-Compta-Logistique
+          (cd paquet && zip -qr -9 ../livraison.zip ERP-Compta-Logistique)
+          if [ -f windows/ERP-Compta-Logistique-Setup.exe ]; then
+            (cd windows && zip -q -9 ../livraison.zip ERP-Compta-Logistique-Setup.exe)
+          fi
+          printf '%s' "$CLE_PUBLIQUE_B64" | base64 -d > cle_publique.pem
+          openssl rand -hex 32 > cle.txt
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -in livraison.zip -out livraison/livraison.zip.enc -pass file:cle.txt
+          openssl pkeyutl -encrypt -pubin -inkey cle_publique.pem \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 -pkeyopt rsa_mgf1_md:sha256 \
+            -in cle.txt -out livraison/cle.txt.enc
+          shred -u cle.txt
+          sha256sum livraison.zip | cut -d' ' -f1 > livraison/empreinte_sha256.txt
+          echo "::notice title=Empreinte SHA-256 de livraison.zip::$(cat livraison/empreinte_sha256.txt) ($(stat -c %s livraison.zip) octets)"
+          cd livraison
+          (cd .. && split -b 45m -d livraison/livraison.zip.enc livraison/partie_ && rm livraison/livraison.zip.enc)
+          git init -q
+          git checkout -q --orphan livraison
+          git add .
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Livraison chiffrée du build Windows (run ${GITHUB_RUN_ID})"
+          git push -q "https://x-access-token:${JETON}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/livraison/windows-${GITHUB_RUN_ID}"
+          echo "::notice title=Livraison::branche livraison/windows-${GITHUB_RUN_ID}"
