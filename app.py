@@ -64,13 +64,14 @@ fond (invisible : la fenêtre affichée continue de pointer vers Render) —
 juste pour que la synchro ait enfin un endroit où écrire pendant que vous
 travaillez en ligne.
 
-CORRECTIF N°3 — SECRET_KEY PARTAGÉE :
-Un token JWT n'est valide que si sa signature est vérifiée avec la MÊME
-DJANGO_SECRET_KEY que celle qui l'a émis. Le token est émis par Render (en
-ligne) ; il doit donc être vérifiable avec la même clé une fois rejoué
-contre le serveur Django local. SECRET_KEY_PARTAGEE ci-dessous DOIT être
-recopiée à l'identique dans la variable d'environnement DJANGO_SECRET_KEY du
-service Render (Dashboard Render -> service backend -> Environment).
+CORRECTIF N°3 — PLUS AUCUN SECRET PARTAGÉ :
+Avant, une DJANGO_SECRET_KEY identique à celle de Render était écrite en dur
+ici (et donc publique). Désormais les jetons de connexion sont signés par
+Render avec une clé PRIVÉE RSA qui ne quitte jamais Render ; ce programme
+n'embarque que la clé PUBLIQUE (config/jwt_cles.py côté backend), qui ne
+permet que de vérifier. La DJANGO_SECRET_KEY locale est un secret aléatoire
+propre à chaque poste, créé au premier lancement dans le dossier de données
+de l'application et jamais partagé.
 """
 import json
 import os
@@ -93,12 +94,41 @@ CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 DJANGO_LOCAL_PORT = 8813
 DJANGO_LOCAL_URL = f"http://127.0.0.1:{DJANGO_LOCAL_PORT}"
 
-# DOIT être IDENTIQUE à la variable d'environnement DJANGO_SECRET_KEY du
-# service Render (voir note en tête de fichier, correctif n°3). Sans ça, un
-# token émis en ligne ne peut jamais être validé par le serveur Django
-# local, même une fois correctement transmis et même une fois l'utilisateur
-# correctement synchronisé dans la base locale.
-SECRET_KEY_PARTAGEE = "k8x!Qz3mP9vR2wL7nB5tY4cJ6hF1sD0aE8gU3iO7pV2xM9qN"
+def _dossier_donnees():
+    """Même emplacement que config.settings_offline (dossier AppData/LoubaERP)."""
+    from pathlib import Path
+    if os.name == "nt":
+        return Path(os.environ.get("APPDATA", str(Path.home()))) / "LoubaERP"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "LoubaERP"
+    return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "LoubaERP"
+
+
+def _secret_django_local():
+    """
+    Secret Django propre à CE poste : aléatoire, créé une fois, conservé dans le
+    dossier de données (lisible par l'utilisateur du poste uniquement). Il sert
+    au chiffrement local et aux signatures internes, jamais à l'authentification
+    auprès de Render.
+    """
+    import secrets
+    dossier = _dossier_donnees()
+    dossier.mkdir(parents=True, exist_ok=True)
+    chemin = dossier / "secret_django.key"
+    try:
+        valeur = chemin.read_text(encoding="utf-8").strip()
+        if len(valeur) >= 40:
+            return valeur
+    except OSError:
+        pass
+    valeur = secrets.token_urlsafe(64)
+    tmp = chemin.with_suffix(".tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(valeur)
+    os.replace(tmp, chemin)
+    return valeur
+
 
 DEFAULT_CONFIG = {
     "url": "https://erp-louba-frontend.onrender.com",
@@ -213,12 +243,9 @@ def demarrer_django_local(host="127.0.0.1"):
     d'autre ne doit pouvoir s'y connecter).
     """
     os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings_offline"
-    # Voir correctif n°3 en tête de fichier : doit matcher DJANGO_SECRET_KEY
-    # sur Render pour que les tokens émis en ligne restent valides ici.
-    # setdefault (et non affectation directe) : si un opérateur a
-    # explicitement défini DJANGO_SECRET_KEY dans l'environnement du poste
-    # (cas avancé), on respecte ce choix plutôt que de l'écraser.
-    os.environ.setdefault("DJANGO_SECRET_KEY", SECRET_KEY_PARTAGEE)
+    # Voir correctif n°3 en tête de fichier : secret aléatoire propre au poste.
+    # setdefault : un opérateur peut imposer le sien via l'environnement.
+    os.environ.setdefault("DJANGO_SECRET_KEY", _secret_django_local())
     if host == "0.0.0.0":
         # Nécessaire pour que Django accepte les requêtes venant d'autres
         # machines du réseau (sinon DisallowedHost) — sûr uniquement parce
