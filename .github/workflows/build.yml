@@ -198,11 +198,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Récupérer le build Windows
+      - name: Récupérer les builds macOS et Linux
         uses: actions/download-artifact@v4
         with:
-          name: erp-desktop-windows-latest
-          path: windows
+          pattern: erp-desktop-*
+          path: tout
 
       - name: Chiffrer et déposer sur une branche temporaire
         env:
@@ -211,12 +211,9 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          mkdir -p paquet livraison
-          mv windows/ERP-Compta-Logistique-Windows paquet/ERP-Compta-Logistique
-          (cd paquet && zip -qr -9 ../livraison.zip ERP-Compta-Logistique)
-          if [ -f windows/ERP-Compta-Logistique-Setup.exe ]; then
-            (cd windows && zip -q -9 ../livraison.zip ERP-Compta-Logistique-Setup.exe)
-          fi
+          mkdir -p livraison
+          (cd tout/erp-desktop-macos-latest && zip -qr -9 ../../livraison.zip .)
+          (cd tout/erp-desktop-ubuntu-latest && zip -qr -9 ../../livraison.zip .)
           printf '%s' "$CLE_PUBLIQUE_B64" | base64 -d > cle_publique.pem
           openssl rand -hex 32 > cle.txt
           openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -in livraison.zip -out livraison/livraison.zip.enc -pass file:cle.txt
