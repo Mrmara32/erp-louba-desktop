@@ -82,6 +82,39 @@ import time
 from urllib.parse import urlencode, urlparse
 import webview
 
+
+def _rediriger_sorties_vers_journal():
+    """
+    Version installee (sans fenetre de console) : stdout/stderr n'existent pas
+    (None) sous Windows en mode fenetre -> tout print()/logging planterait.
+    On les redirige vers un fichier journal %APPDATA%\\LoubaERP\\erp.log,
+    utile aussi pour le support en cas de probleme chez un client.
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    try:
+        from pathlib import Path
+        if os.name == "nt":
+            base = Path(os.environ.get("APPDATA", str(Path.home()))) / "LoubaERP"
+        elif sys.platform == "darwin":
+            base = Path.home() / "Library" / "Application Support" / "LoubaERP"
+        else:
+            base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "LoubaERP"
+        base.mkdir(parents=True, exist_ok=True)
+        journal = base / "erp.log"
+        if journal.exists() and journal.stat().st_size > 2_000_000:
+            journal.replace(base / "erp.log.old")
+        flux = open(journal, "a", encoding="utf-8", errors="replace", buffering=1)
+    except Exception:
+        flux = open(os.devnull, "w")
+    if sys.stdout is None or os.name == "nt":
+        sys.stdout = flux
+    if sys.stderr is None or os.name == "nt":
+        sys.stderr = flux
+
+
+_rediriger_sorties_vers_journal()
+
 if sys.platform.startswith("linux") and os.geteuid() == 0:
     os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--no-sandbox")
 

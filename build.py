@@ -182,7 +182,6 @@ def main():
         sys.executable, "-m", "PyInstaller",
         "--name", NOM_APP,
         "--onedir",
-        #"--windowed",
         "--noconfirm",
     ]
     for module in HIDDEN_IMPORTS:
@@ -201,6 +200,9 @@ def main():
         "--add-data",
         f"{migrations_jwt}{os.pathsep}rest_framework_simplejwt/token_blacklist/migrations",
     ]
+    if systeme == "Windows":
+        # Pas de fenetre noire de console chez le client (journal : %APPDATA%\\LoubaERP\\erp.log)
+        commande.append("--windowed")
     commande.append("app.py")
 
     print(f"Système détecté : {systeme}")
