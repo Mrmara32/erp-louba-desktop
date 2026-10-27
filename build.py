@@ -37,6 +37,7 @@ il tourne (pas de cross-compilation). Pour livrer Windows/macOS/Linux, il
 faut lancer ce script sur chacun des 3 systèmes (ou une CI GitHub Actions
 avec une matrice d'OS).
 """
+import os
 import platform
 import shutil
 import subprocess
@@ -188,6 +189,18 @@ def main():
         commande += ["--hidden-import", module]
     for package in COLLECT_SUBMODULES:
         commande += ["--collect-submodules", package]
+    # rest_framework_simplejwt.token_blacklist.migrations.0011 lit son propre
+    # fichier .py (Path(__file__).resolve(strict=True) + listdir) : dans un
+    # exe PyInstaller les .py n'existent pas sur le disque (bytecode dans
+    # l'archive) -> FileNotFoundError au migrate chez le client. On copie donc
+    # les sources de ce dossier de migrations a cote de l'exe.
+    import importlib.util
+    spec = importlib.util.find_spec("rest_framework_simplejwt.token_blacklist")
+    migrations_jwt = Path(spec.submodule_search_locations[0]) / "migrations"
+    commande += [
+        "--add-data",
+        f"{migrations_jwt}{os.pathsep}rest_framework_simplejwt/token_blacklist/migrations",
+    ]
     commande.append("app.py")
 
     print(f"Système détecté : {systeme}")
