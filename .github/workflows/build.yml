@@ -235,3 +235,23 @@ jobs:
             commit -q -m "Livraison chiffrée du build Windows (run ${GITHUB_RUN_ID})"
           git push -q "https://x-access-token:${JETON}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/livraison/windows-${GITHUB_RUN_ID}"
           echo "::notice title=Livraison::branche livraison/windows-${GITHUB_RUN_ID}"
+
+  # Publication des fichiers dans l'onglet "Releases" lors d'un tag de version (v*).
+  publier:
+    needs: build
+    if: ${{ always() && startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: livrables
+          merge-multiple: true
+      - name: Archiver les dossiers (Windows, Mac, Linux)
+        run: |
+          cd livrables
+          for d in */; do zip -qr "${d%/}.zip" "$d" && rm -rf "$d"; done
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: livrables/*
