@@ -239,7 +239,7 @@ jobs:
   # Publication des fichiers dans l'onglet "Releases" lors d'un tag de version (v*).
   publier:
     needs: build
-    if: ${{ always() && startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -254,4 +254,6 @@ jobs:
           for d in */; do zip -qr "${d%/}.zip" "$d" && rm -rf "$d"; done
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('version-{0}', github.run_number) }}
+          name: ERP GROUPE ACTIFSYS ${{ github.run_number }}
           files: livrables/*
