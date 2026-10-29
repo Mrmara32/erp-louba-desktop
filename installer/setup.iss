@@ -33,7 +33,7 @@ SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\{#MyAppExeName}
 ; Décommenter si un fichier .ico est ajouté au projet :
-; SetupIconFile=icon.ico
+SetupIconFile=icon.ico
 
 [Languages]
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
