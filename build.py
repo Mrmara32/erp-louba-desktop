@@ -38,6 +38,7 @@ faut lancer ce script sur chacun des 3 systèmes (ou une CI GitHub Actions
 avec une matrice d'OS).
 """
 import os
+import os
 import platform
 import shutil
 import subprocess
@@ -175,8 +176,16 @@ def copier_arbre(source, destination):
     print(f"Copié : {source} -> {destination}")
 
 
+# ÉDITION : "legere" = client léger PUBLIC (aucun code serveur dans l'installateur) ; "complete" = édition hors ligne PRIVÉE
+# (contient le backend, à ne livrer qu'à un client sous licence, jamais en téléchargement public).
+EDITION = os.environ.get("EDITION", "complete").strip().lower()
+
+
 def main():
     systeme = platform.system()
+    if EDITION not in ("legere", "complete"):
+        sys.exit(f"EDITION inconnue : {EDITION!r} (attendu : legere ou complete)")
+    print(f"Édition : {EDITION}")
 
     commande = [
         sys.executable, "-m", "PyInstaller",
@@ -184,10 +193,13 @@ def main():
         "--onedir",
         "--noconfirm",
     ]
-    for module in HIDDEN_IMPORTS:
-        commande += ["--hidden-import", module]
-    for package in COLLECT_SUBMODULES:
-        commande += ["--collect-submodules", package]
+    if EDITION == "legere":
+        commande += ["--hidden-import", "requests"]      # tout le reste (Django, DRF…) est inutile sans serveur local
+    else:
+        for module in HIDDEN_IMPORTS:
+            commande += ["--hidden-import", module]
+        for package in COLLECT_SUBMODULES:
+            commande += ["--collect-submodules", package]
     # rest_framework_simplejwt.token_blacklist.migrations.0011 lit son propre
     # fichier .py (Path(__file__).resolve(strict=True) + listdir) : dans un
     # exe PyInstaller les .py n'existent pas sur le disque (bytecode dans
@@ -210,8 +222,12 @@ def main():
     subprocess.run(commande, check=True)
 
     dossier_sortie = ICI / "dist" / NOM_APP
-    copier_arbre(ERP_PROJECT_SRC, dossier_sortie / "erp_project")
-    copier_arbre(FRONTEND_DIST_SRC, dossier_sortie / "erp_project" / "frontend_dist")
+    if EDITION == "complete":
+        copier_arbre(ERP_PROJECT_SRC, dossier_sortie / "erp_project")
+        copier_arbre(FRONTEND_DIST_SRC, dossier_sortie / "erp_project" / "frontend_dist")
+    else:
+        (dossier_sortie / "EDITION_LEGERE").write_text("Client léger : aucun code serveur embarqué.\n", encoding="utf-8")
+        assert not (dossier_sortie / "erp_project").exists(), "L'édition légère ne doit contenir aucun code serveur"
 
     print(
         f"\nExécutable généré dans dist/{NOM_APP}/"

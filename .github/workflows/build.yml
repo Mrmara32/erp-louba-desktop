@@ -8,6 +8,15 @@ on:
       - "v*"
   workflow_dispatch:
     inputs:
+      edition:
+        description: >-
+          legere = client léger PUBLIC (aucun code serveur, publié dans Releases) ;
+          complete = édition hors ligne PRIVÉE (contient le backend : jamais publiée,
+          uniquement livrée chiffrée via cle_publique_livraison).
+        required: false
+        default: "legere"
+        type: choice
+        options: [legere, complete]
       cle_publique_livraison:
         description: >-
           Facultatif : clé publique RSA (PEM encodé en base64, une seule ligne).
@@ -23,6 +32,9 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      # Un tag de version (publication publique) est TOUJOURS l'édition légère.
+      EDITION: ${{ github.event_name == 'workflow_dispatch' && inputs.edition || 'legere' }}
 
     steps:
       # 1) Le dépôt de l'application desktop elle-même (ce dépôt), placé
@@ -36,6 +48,7 @@ jobs:
 
       # 2) Le backend Django (dépôt PRIVÉ) -> copié dans "erp_project"
       - name: Récupérer erp_project (backend Django)
+        if: env.EDITION == 'complete'
         uses: actions/checkout@v4
         with:
           repository: Mrmara32/erp-louba-backend
@@ -44,6 +57,7 @@ jobs:
 
       # 3) Le frontend React (dépôt PRIVÉ) -> copié dans "erp-frontend"
       - name: Récupérer erp-frontend (frontend React)
+        if: env.EDITION == 'complete'
         uses: actions/checkout@v4
         with:
           repository: Mrmara32/erp-louba-frontend
@@ -70,11 +84,13 @@ jobs:
       # 4) Compiler le frontend React -> produit erp-frontend/dist/, que
       #    build.py copiera ensuite dans le paquet final.
       - name: Installer Node.js
+        if: env.EDITION == 'complete'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
       - name: Compiler le frontend React
+        if: env.EDITION == 'complete'
         working-directory: erp-frontend
         run: |
           npm install
@@ -239,7 +255,8 @@ jobs:
   # Publication des fichiers dans l'onglet "Releases" lors d'un tag de version (v*).
   publier:
     needs: build
-    if: ${{ always() }}
+    # SÉCURITÉ : on ne publie JAMAIS publiquement l'édition complète (elle contient le code du backend).
+    if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.edition == 'legere') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -534,8 +534,32 @@ def _preparer_hors_ligne_en_arriere_plan(config):
         traceback.print_exc()
 
 
+def _edition_legere():
+    """Édition PUBLIQUE : aucun code serveur n'est livré (build.py crée le fichier marqueur EDITION_LEGERE à côté de l'exe)."""
+    return os.path.exists(os.path.join(BASE_DIR, "EDITION_LEGERE"))
+
+
+_PAGE_SANS_RESEAU = """<!doctype html><meta charset="utf-8"><title>ERP GROUPE ACTIFSYS</title>
+<body style="font-family:system-ui,sans-serif;background:#f4f5f4;color:#0f172a;display:grid;place-items:center;height:100vh;margin:0">
+<div style="max-width:460px;text-align:center;padding:24px"><h2>Connexion à Internet requise</h2>
+<p>Cette version se connecte au serveur ACTIFSYS. Vérifiez votre connexion puis fermez et rouvrez l'application.</p>
+<p style="color:#475569;font-size:14px">Besoin d'un fonctionnement sans Internet (serveur sur votre site) ? Contactez-nous pour l'édition hors ligne sous licence.</p></div></body>"""
+
+
+def _ouvrir_client_leger(config):
+    """Client léger : coquille de fenêtre vers le serveur en ligne. Toute la logique (et la licence) reste côté serveur."""
+    if internet_disponible(config["serveur_backend"]):
+        creer_fenetre(config, url=config["url"])
+    else:
+        webview.create_window(title=config["title"], html=_PAGE_SANS_RESEAU, width=700, height=480)
+    webview.start()
+
+
 def main():
     config = charger_config()
+    if _edition_legere():
+        _ouvrir_client_leger(config)
+        return
     type_installation = config.get("type_installation", "complete")
 
     # --- Mode OFFLINE PUR : jamais de bascule/synchro automatique --------

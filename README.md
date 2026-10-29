@@ -154,3 +154,12 @@ de redistribuer l'exécutable** pour livrer une nouvelle version de l'ERP :
 il suffit de redéployer le frontend React (`../erp-frontend`) et le backend
 Django (`../erp_project`). L'exécutable desktop reste valable indéfiniment,
 sauf changement de configuration (nouvelle URL, etc.).
+
+## Éditions et sécurité du code (important)
+
+Ce dépôt est PUBLIC (les installateurs sont téléchargeables sans compte). Il ne doit donc JAMAIS publier le code du backend.
+
+- **Édition légère** (`EDITION=legere`, défaut du CI et de tout tag `v*`) : coquille de fenêtre vers le serveur en ligne. Aucun code serveur, aucune base, aucune logique de licence : c'est la seule édition publiée dans Releases.
+- **Édition complète / hors ligne** (`EDITION=complete`) : contient le backend. Réservée aux clients sous contrat qui exigent un fonctionnement sans Internet. Elle n'est jamais publiée ; elle se lance à la main (Actions > Run workflow > edition = complete) avec une clé publique RSA, et le build est livré chiffré.
+
+Build local : `EDITION=legere python build.py` (public) ou `EDITION=complete python build.py` (privé).
