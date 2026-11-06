@@ -269,6 +269,22 @@ jobs:
         run: |
           cd livrables
           for d in */; do zip -qr "${d%/}.zip" "$d" && rm -rf "$d"; done
+      - name: GARDE-FOU - refuser tout paquet contenant du code serveur
+        run: |
+          set -e
+          echo "Verification des livrables avant publication publique..."
+          for z in livrables/*.zip; do
+            if unzip -l "$z" | grep -Eq "/erp_project/|/erp-frontend/|\.pyc?$.*(utilisateurs|journaux|tresorerie|paie|licences)"; then
+              echo "::error title=Code serveur detecte::$z contient du code serveur : publication refusee"; exit 1
+            fi
+          done
+          for f in livrables/*.exe livrables/*.dmg; do
+            [ -f "$f" ] || continue
+            if strings -n 8 "$f" | grep -Eq "erp_project/(utilisateurs|journaux|tresorerie|paie|licences)"; then
+              echo "::error title=Code serveur detecte::$f contient du code serveur : publication refusee"; exit 1
+            fi
+          done
+          echo "OK : aucun code serveur dans les livrables."
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('version-{0}', github.run_number) }}
