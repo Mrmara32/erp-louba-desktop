@@ -20,6 +20,8 @@ jobs:
 
       # La clé de signature vit dans le dépôt PRIVÉ du frontend (même accès que l'édition complète).
       - name: Récupérer la clé de signature (dépôt privé)
+        id: cle
+        continue-on-error: true
         uses: actions/checkout@v4
         with:
           repository: Mrmara32/erp-louba-frontend
@@ -45,7 +47,15 @@ jobs:
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: "1.${{ github.run_number }}"
         run: |
-          export KEYSTORE_PASSWORD="$(cat ${{ github.workspace }}/frontend/android-signing/mot-de-passe.txt)"
+          if [ -f "$KEYSTORE_PATH" ]; then
+            export KEYSTORE_PASSWORD="$(cat ${{ github.workspace }}/frontend/android-signing/mot-de-passe.txt)"
+            echo "Clé de signature officielle (dépôt privé) utilisée."
+          else
+            echo "::warning::Jeton CROSS_REPO_TOKEN invalide : clé TEMPORAIRE utilisée. Renouvelez le jeton puis relancez pour une APK signée avec la clé officielle."
+            export KEYSTORE_PATH="$RUNNER_TEMP/temporaire.jks"
+            export KEYSTORE_PASSWORD="$(openssl rand -hex 16)"
+            keytool -genkeypair -keystore "$KEYSTORE_PATH" -alias actifsys -keyalg RSA -keysize 2048 -validity 10000 -storepass "$KEYSTORE_PASSWORD" -keypass "$KEYSTORE_PASSWORD" -dname "CN=ACTIFSYSTEM SARLU, O=ACTIFSYSTEM, L=Conakry, C=GN"
+          fi
           gradle --no-daemon assembleRelease
           cp app/build/outputs/apk/release/app-release.apk ../ERP-ACTIFSYS.apk
 
