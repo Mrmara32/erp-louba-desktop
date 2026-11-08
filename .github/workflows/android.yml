@@ -1,0 +1,69 @@
+name: Build ERP Android (APK)
+
+# Application Android = coque « Trusted Web Activity » qui ouvre https://actifmarket.net en plein écran.
+# Le fichier ERP-ACTIFSYS.apk est ajouté à la dernière version publiée (même lien que les fichiers Windows/macOS/Linux).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: erp-desktop
+
+      # La clé de signature vit dans le dépôt PRIVÉ du frontend (même accès que l'édition complète).
+      - name: Récupérer la clé de signature (dépôt privé)
+        uses: actions/checkout@v4
+        with:
+          repository: Mrmara32/erp-louba-frontend
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+          path: frontend
+          sparse-checkout: android-signing
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Compiler et signer l'APK
+        working-directory: erp-desktop/android
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/frontend/android-signing/actifsys-release.jks
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: "1.${{ github.run_number }}"
+        run: |
+          export KEYSTORE_PASSWORD="$(cat ${{ github.workspace }}/frontend/android-signing/mot-de-passe.txt)"
+          gradle --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../ERP-ACTIFSYS.apk
+
+      - name: Empreinte de la clé (pour assetlinks.json)
+        run: |
+          $ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools | sort -V | tail -1)/apksigner verify --print-certs erp-desktop/ERP-ACTIFSYS.apk | grep -i "SHA-256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ERP-ACTIFSYS-apk
+          path: erp-desktop/ERP-ACTIFSYS.apk
+
+      - name: Ajouter l'APK à la dernière version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then TAG="${{ github.ref_name }}"; else TAG="$(gh release view --json tagName --jq .tagName)"; fi
+          for i in $(seq 1 30); do gh release view "$TAG" >/dev/null 2>&1 && break; echo "version $TAG pas encore publiée..."; sleep 30; done
+          gh release upload "$TAG" erp-desktop/ERP-ACTIFSYS.apk --clobber
+          echo "APK ajouté à la version $TAG"

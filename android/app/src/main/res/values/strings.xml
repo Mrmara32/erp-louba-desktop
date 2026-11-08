@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">ERP ACTIFSYS</string>
+    <string name="asset_statements" translatable="false">[{\"relation\": [\"delegate_permission/common.handle_all_urls\"], \"target\": {\"namespace\": \"android_app\", \"package_name\": \"net.actifmarket.erp\", \"sha256_cert_fingerprints\": [\"F4:65:A9:A8:D3:60:AC:F0:80:00:88:A6:3F:D0:98:71:1D:65:93:D4:64:07:54:33:74:6A:C1:FD:0B:61:2D:E1\"]}}]</string>
+</resources>
