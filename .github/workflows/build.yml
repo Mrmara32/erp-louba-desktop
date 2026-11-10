@@ -252,9 +252,45 @@ jobs:
           git push -q "https://x-access-token:${JETON}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/livraison/windows-${GITHUB_RUN_ID}"
           echo "::notice title=Livraison::branche livraison/windows-${GITHUB_RUN_ID}"
 
+  # Vidéos de formation (dépôt PRIVÉ du frontend, dossier public/videos) : deux ZIP joints à chaque publication.
+  # continue-on-error : un jeton invalide ne doit pas empêcher la publication des installateurs.
+  videos:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Récupérer uniquement les vidéos du frontend
+        uses: actions/checkout@v4
+        with:
+          repository: Mrmara32/erp-louba-frontend
+          token: ${{ secrets.CROSS_REPO_TOKEN }}
+          path: frontend
+          sparse-checkout: public/videos
+          sparse-checkout-cone-mode: true
+      - name: Créer les deux archives
+        run: |
+          set -e
+          D="Videos-formation-ERP-GROUPE-ACTIFSYS"
+          mkdir -p p1/$D p2/$D sortie
+          cp -r frontend/public/videos/rubriques p2/$D/
+          find frontend/public/videos -maxdepth 1 -name '*.mp4' -exec cp {} p1/$D/ \;
+          cat > p1/$D/LISEZMOI.txt <<'EOT'
+          VIDÉOS PÉDAGOGIQUES - ERP GROUPE ACTIFSYS / ACTIF Market (ACTIFSYSTEM SARLU, Conakry)
+          Présentation, inscription pas à pas, séries de formation, exercices de saisie et d'écritures, boutique.
+          Les vidéos par rubrique sont dans l'archive n°2 (dossier rubriques).
+          Voir en ligne : https://actifmarket.net/formation
+          EOT
+          cp p1/$D/LISEZMOI.txt p2/$D/
+          (cd p1 && zip -q -0 -r ../sortie/Videos-formation-1-series-et-exercices.zip $D)
+          (cd p2 && zip -q -0 -r ../sortie/Videos-formation-2-par-rubrique.zip $D)
+          ls -l sortie
+      - uses: actions/upload-artifact@v4
+        with:
+          name: videos-formation
+          path: sortie/*
+
   # Publication des fichiers dans l'onglet "Releases" lors d'un tag de version (v*).
   publier:
-    needs: build
+    needs: [build, videos]
     # SÉCURITÉ : on ne publie JAMAIS publiquement l'édition complète (elle contient le code du backend).
     if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.edition == 'legere') }}
     runs-on: ubuntu-latest
@@ -285,8 +321,34 @@ jobs:
             fi
           done
           echo "OK : aucun code serveur dans les livrables."
+      - name: Créer l'image ISO « pack d'installation » (installateurs + vidéos + liens)
+        run: |
+          set -e
+          sudo apt-get update -qq && sudo apt-get install -y -qq xorriso unzip
+          P=iso_contenu
+          mkdir -p "$P/Installateurs" "$P/Videos-de-formation"
+          for f in livrables/*.exe livrables/*.dmg livrables/*.apk livrables/ERP-Compta-Logistique-*.zip; do
+            [ -f "$f" ] && cp "$f" "$P/Installateurs/"
+          done
+          for z in livrables/Videos-formation-*.zip; do
+            [ -f "$z" ] && unzip -q -o "$z" -d "$P/Videos-de-formation"
+          done
+          cat > "$P/LISEZMOI.txt" <<'EOT'
+          ERP GROUPE ACTIFSYS / ACTIF Market - pack d'installation
+          Installateurs : Windows (.exe), macOS (.dmg), Linux, Android (.apk).
+          Videos-de-formation : toutes les vidéos pédagogiques.
+          L'application se connecte au serveur en ligne : une connexion internet est nécessaire pour travailler.
+          Site : https://actifmarket.net - Vidéos en ligne : https://actifmarket.net/formation
+          EOT
+          cp "$P/LISEZMOI.txt" "$P/LISEZMOI.html" 2>/dev/null || true
+          xorriso -as mkisofs -iso-level 3 -J -R -V "ERP_ACTIFSYS" -o livrables/ERP-GROUPE-ACTIFSYS-Pack-Installation.iso "$P"
+          ls -l livrables/*.iso
+          rm -rf "$P"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('version-{0}', github.run_number) }}
           name: ERP GROUPE ACTIFSYS ${{ github.run_number }}
           files: livrables/*
+          body: |
+            Vidéos de formation : https://actifmarket.net/formation (archives jointes à cette version).
+            Pack hors ligne : ERP-GROUPE-ACTIFSYS-Pack-Installation.iso (installateurs + vidéos).

@@ -163,3 +163,12 @@ Ce dépôt est PUBLIC (les installateurs sont téléchargeables sans compte). Il
 - **Édition complète / hors ligne** (`EDITION=complete`) : contient le backend. Réservée aux clients sous contrat qui exigent un fonctionnement sans Internet. Elle n'est jamais publiée ; elle se lance à la main (Actions > Run workflow > edition = complete) avec une clé publique RSA, et le build est livré chiffré.
 
 Build local : `EDITION=legere python build.py` (public) ou `EDITION=complete python build.py` (privé).
+
+
+## Vidéos de formation
+
+Les vidéos pédagogiques (présentation, inscription, séries, exercices et une vidéo par rubrique) sont en ligne sur
+<https://actifmarket.net/formation> et dans le menu **Aide > Vidéos de formation** de l'application. Chaque version publiée
+(onglet Releases) les joint en deux archives ZIP, et l'image `ERP-GROUPE-ACTIFSYS-Pack-Installation.iso` regroupe les
+installateurs (Windows, macOS, Linux, Android) et toutes les vidéos pour une installation sans téléchargement séparé.
+L'application elle-même reste connectée au serveur en ligne : une connexion internet est nécessaire pour travailler.

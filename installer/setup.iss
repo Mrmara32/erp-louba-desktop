@@ -56,8 +56,12 @@ Source: "..\dist\{#MyAppFolderName}\*"; DestDir: "{app}"; Flags: ignoreversion r
 ; mise à jour ne doit PAS écraser sa configuration.
 Source: "..\config.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
 
+[INI]
+Filename: "{app}\Videos-de-formation.url"; Section: "InternetShortcut"; Key: "URL"; String: "https://actifmarket.net/formation"
+
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\Vidéos de formation"; Filename: "{app}\Videos-de-formation.url"
 Name: "{group}\Désinstaller {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
