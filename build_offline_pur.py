@@ -32,6 +32,10 @@ HIDDEN_IMPORTS = [
     "societes", "utilisateurs", "comptes", "journaux", "logistique",
     "tresorerie", "etats", "notifications", "entreprise", "licences",
     "paie", "demandes", "ventes", "stocks", "synchro",
+    # Agent d'audit financier + prêts : apps ajoutées au serveur en ligne.
+    "agent_audit", "prets",
+    # Lecture des PDF / Office par l'agent d'audit (analyse forensique).
+    "pypdf", "defusedxml",
     "rest_framework", "rest_framework_simplejwt", "corsheaders",
     "django_filters", "whitenoise", "dj_database_url",
     "rest_framework_simplejwt.views",
@@ -69,6 +73,7 @@ COLLECT_SUBMODULES = [
     "reportlab",
     "PIL",
     "openpyxl",
+    "pypdf",
 ]
 
 DOSSIERS_A_EXCLURE = {"__pycache__", "migrations_backup", ".git"}
