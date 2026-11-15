@@ -63,6 +63,8 @@ HIDDEN_IMPORTS = [
     "agent_audit", "prets",
     # Lecture des PDF / Office par l'agent d'audit (analyse forensique).
     "pypdf", "defusedxml",
+    # Export Word (.docx) des rapports de l'agent d'audit.
+    "docx", "lxml",
     # assistant_ia manquait ici : comme toute app listée dans INSTALLED_APPS,
     # Django l'importe au démarrage (apps.populate()), AVANT que la moindre
     # route ne soit appelée -- son absence ne casse pas que l'assistant,
