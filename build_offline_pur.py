@@ -36,6 +36,8 @@ HIDDEN_IMPORTS = [
     "agent_audit", "prets",
     # Lecture des PDF / Office par l'agent d'audit (analyse forensique).
     "pypdf", "defusedxml",
+    # Export Word (.docx) des rapports de l'agent d'audit.
+    "docx", "lxml",
     "rest_framework", "rest_framework_simplejwt", "corsheaders",
     "django_filters", "whitenoise", "dj_database_url",
     "rest_framework_simplejwt.views",
