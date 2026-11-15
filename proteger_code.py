@@ -15,6 +15,7 @@ Limite honnête : aucune compilation ne rend le code inviolable ; elle supprime 
 reste la clé de licence signée (clé publique seule dans le logiciel) et les limites du plan appliquées par la licence.
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -25,12 +26,24 @@ CONSERVER = {"manage.py", "__init__.py", "apps.py", "settings.py", "urls.py", "w
 IGNORER_DOSSIERS = {"migrations", "__pycache__", "tests_data", ".git", "node_modules", "static", "staticfiles"}
 
 
+def modules_tests_reels(racine: Path):
+    """Fichiers « tests*.py » qui sont en fait des modules de l'application (importés par du code qui n'est pas un test), ex. agent_audit/tests_experts.py.
+    Ceux-là doivent être compilés et livrés ; les vrais fichiers de test sont supprimés."""
+    candidats = [p for p in racine.rglob("tests_*.py")]
+    autres = [p for p in racine.rglob("*.py") if not p.name.startswith("tests")]
+    texte = "\n".join(p.read_text(encoding="utf-8", errors="ignore") for p in autres)
+    return {p for p in candidats if re.search(rf"(?:from|import)\s[^\n]*\b{re.escape(p.stem)}\b", texte)}
+
+
 def sources_a_compiler(racine: Path):
+    reels = modules_tests_reels(racine)
     for p in racine.rglob("*.py"):
         rel = p.relative_to(racine)
         if any(part in IGNORER_DOSSIERS for part in rel.parts):
             continue
-        if p.name in CONSERVER or p.name.startswith("tests") or "." in p.stem:
+        if p.name in CONSERVER or "." in p.stem:
+            continue
+        if p.name.startswith("tests") and p not in reels:
             continue
         yield p
 
@@ -42,8 +55,10 @@ def main(src, sortie):
     shutil.copytree(src, sortie, ignore=shutil.ignore_patterns(".git", "__pycache__", "node_modules", "*.pyc"))
     fichiers = list(sources_a_compiler(sortie))
     # Les tests ne sont pas livrés dans l'installateur.
+    reels = modules_tests_reels(sortie)
     for t in list(sortie.rglob("tests*.py")):
-        t.unlink()
+        if t not in reels:
+            t.unlink()
     print(f"{len(fichiers)} fichiers à compiler…")
     from Cython.Build import cythonize
     ok, laisses = [], []
@@ -64,7 +79,7 @@ def main(src, sortie):
         "from setuptools import setup, Extension\n"
         f"mods = {modules!r}\n"
         "setup(ext_modules=[Extension(n, [c]) for n, c in mods])\n", encoding="utf-8")
-    subprocess.check_call([sys.executable, setup.name, "build_ext", "--inplace"], cwd=sortie)
+    subprocess.check_call([sys.executable, setup.name, "build_ext", "--inplace", "-j", str(os.cpu_count() or 2)], cwd=sortie)
     for f in ok:
         f.unlink(missing_ok=True)
         f.with_suffix(".c").unlink(missing_ok=True)
