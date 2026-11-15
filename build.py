@@ -59,6 +59,10 @@ HIDDEN_IMPORTS = [
     "societes", "utilisateurs", "comptes", "journaux", "logistique",
     "tresorerie", "etats", "notifications", "entreprise", "licences",
     "paie", "demandes", "ventes", "stocks", "synchro",
+    # Agent d'audit financier + prêts : apps ajoutées au serveur en ligne.
+    "agent_audit", "prets",
+    # Lecture des PDF / Office par l'agent d'audit (analyse forensique).
+    "pypdf", "defusedxml",
     # assistant_ia manquait ici : comme toute app listée dans INSTALLED_APPS,
     # Django l'importe au démarrage (apps.populate()), AVANT que la moindre
     # route ne soit appelée -- son absence ne casse pas que l'assistant,
@@ -158,6 +162,8 @@ COLLECT_SUBMODULES = [
     # aucun import, il faut donc embarquer le paquet explicitement -- sinon le
     # serveur local répond 500 partout ("No module named 'cryptography'").
     "cryptography",
+    # pypdf : lecture des pièces PDF (agent d'audit) -- sous-modules dynamiques.
+    "pypdf",
 ]
 
 DOSSIERS_A_EXCLURE = {"__pycache__", "migrations_backup", ".git"}
