@@ -96,9 +96,33 @@ jobs:
           npm install
           npm run build
 
+      # 4bis) Édition complète : le code du serveur est compilé en modules binaires (Cython) et les
+      #       sources .py sont supprimées. Le client ne reçoit plus de code Python lisible.
+      #       Si la compilation échoue, la fabrication échoue (jamais de repli silencieux vers le code en clair).
+      - name: Protéger le code du serveur (compilation)
+        if: env.EDITION == 'complete'
+        shell: bash
+        run: |
+          python -m pip install cython setuptools wheel
+          cd erp-desktop
+          python proteger_code.py ../erp_project ../erp_project_protege
+          rm -rf ../erp_project
+          mv ../erp_project_protege ../erp_project
+
       - name: Générer l'exécutable
         working-directory: erp-desktop
         run: python build.py
+
+      - name: Vérifier que le code du serveur n'est plus lisible (édition complète)
+        if: env.EDITION == 'complete'
+        shell: bash
+        run: |
+          cd erp-desktop
+          lisibles=$(find dist -path '*erp_project*' \( -name 'validation_offline.py' -o -name 'machine.py' -o -name 'rapports.py' -o -name 'views.py' \) | head -5)
+          if [ -n "$lisibles" ]; then echo "Code serveur encore lisible :"; echo "$lisibles"; exit 1; fi
+          binaires=$(find dist -path '*erp_project*' \( -name '*.pyd' -o -name '*.so' \) | wc -l)
+          echo "Modules binaires du serveur : $binaires"
+          test "$binaires" -gt 50
 
       # Equivalent macOS de l'installeur Inno Setup (Windows) : Inno Setup
       # est un outil strictement Windows, il n'existe aucune version macOS.
