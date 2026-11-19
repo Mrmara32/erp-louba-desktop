@@ -17,6 +17,13 @@ on:
         default: "legere"
         type: choice
         options: [legere, complete]
+      client_filigrane:
+        description: >-
+          Édition complète uniquement : nom du client à qui cette livraison est destinée. Un identifiant propre
+          à ce client est inscrit dans le code compilé (retrouvable dans Aide > À propos) et affiché dans le
+          résumé du build : si une copie fuite, on sait de quelle livraison elle vient. Laisser vide hors livraison.
+        required: false
+        default: ""
       cle_publique_livraison:
         description: >-
           Facultatif : clé publique RSA (PEM encodé en base64, une seule ligne).
@@ -99,6 +106,27 @@ jobs:
       # 4bis) Édition complète : le code du serveur est compilé en modules binaires (Cython) et les
       #       sources .py sont supprimées. Le client ne reçoit plus de code Python lisible.
       #       Si la compilation échoue, la fabrication échoue (jamais de repli silencieux vers le code en clair).
+      - name: Filigrane du client (identifiant propre à la livraison)
+        if: env.EDITION == 'complete' && github.event_name == 'workflow_dispatch' && inputs.client_filigrane != ''
+        shell: bash
+        env:
+          CLIENT_FILIGRANE: ${{ inputs.client_filigrane }}
+        run: |
+          # Même identifiant pour Windows, macOS et Linux d'un même lancement (dérivé du client et du numéro d'exécution).
+          ID=$(printf '%s|%s' "$CLIENT_FILIGRANE" "${{ github.run_id }}" | sha256sum | cut -c1-16)
+          NOM=$(printf '%s' "$CLIENT_FILIGRANE" | tr -d '"\\' | cut -c1-80)
+          printf 'CLIENT = "%s"\nID = "%s"\n' "$NOM" "$ID" > erp_project/licences/filigrane_client.py
+          echo "Filigrane écrit pour la livraison $ID"
+          {
+            echo "### Filigrane de la livraison"
+            echo ""
+            echo "| Client | Identifiant | Lancement |"
+            echo "|---|---|---|"
+            echo "| $NOM | \`$ID\` | ${{ github.run_id }} |"
+            echo ""
+            echo "Conservez cette ligne : elle relie l'identifiant au client."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Protéger le code du serveur (compilation)
         if: env.EDITION == 'complete'
         shell: bash
@@ -123,6 +151,12 @@ jobs:
           binaires=$(find dist -path '*erp_project*' \( -name '*.pyd' -o -name '*.so' \) | wc -l)
           echo "Modules binaires du serveur : $binaires"
           test "$binaires" -gt 50
+          # Contrôle complet : aucun résidu de compilation, aucun .pyc, et les seuls .py restants sont ceux que Django lit par leur nom.
+          residus=$(find dist -path '*erp_project*' \( -name '*.c' -o -name '*.pyx' -o -name '*.pyc' \) | head -5)
+          if [ -n "$residus" ]; then echo "Résidus de compilation ou bytecode :"; echo "$residus"; exit 1; fi
+          autres=$(find dist -path '*erp_project*' -name '*.py' ! -path '*/migrations/*' ! -name '__init__.py' ! -name 'apps.py' ! -name 'manage.py' ! -name 'settings*.py' ! -name 'urls.py' ! -name 'wsgi.py' ! -name 'asgi.py' ! -name 'setup.py' | head -20)
+          if [ -n "$autres" ]; then echo "Sources Python lisibles non prévues :"; echo "$autres"; exit 1; fi
+          echo "OK : seuls les fichiers de configuration prévus restent lisibles."
 
       # Equivalent macOS de l'installeur Inno Setup (Windows) : Inno Setup
       # est un outil strictement Windows, il n'existe aucune version macOS.
