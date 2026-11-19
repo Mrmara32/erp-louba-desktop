@@ -154,7 +154,7 @@ jobs:
           # Contrôle complet : aucun résidu de compilation, aucun .pyc, et les seuls .py restants sont ceux que Django lit par leur nom.
           residus=$(find dist -path '*erp_project*' \( -name '*.c' -o -name '*.pyx' -o -name '*.pyc' \) | head -5)
           if [ -n "$residus" ]; then echo "Résidus de compilation ou bytecode :"; echo "$residus"; exit 1; fi
-          autres=$(find dist -path '*erp_project*' -name '*.py' ! -path '*/migrations/*' ! -name '__init__.py' ! -name 'apps.py' ! -name 'manage.py' ! -name 'settings*.py' ! -name 'urls.py' ! -name 'wsgi.py' ! -name 'asgi.py' ! -name 'setup.py' | head -20)
+          autres=$(find dist -path '*erp_project*' -name '*.py' ! -path '*/migrations/*' ! -name '__init__.py' ! -name 'apps.py' ! -name 'manage.py' ! -name 'settings*.py' ! -name 'urls.py' ! -name 'wsgi.py' ! -name 'asgi.py' ! -name 'setup.py' ! -name 'gunicorn.conf.py' | head -20)
           if [ -n "$autres" ]; then echo "Sources Python lisibles non prévues :"; echo "$autres"; exit 1; fi
           echo "OK : seuls les fichiers de configuration prévus restent lisibles."
 
