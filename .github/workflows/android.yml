@@ -49,12 +49,20 @@ jobs:
         working-directory: erp-desktop/android
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/frontend/android-signing/actifsys-release.jks
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_SECRET_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: "1.${{ github.run_number }}"
         run: |
-          if [ -f "$KEYSTORE_PATH" ]; then
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_SECRET_PASSWORD" ]; then
+            # Voie recommandée : la clé et son mot de passe vivent dans les secrets GitHub de CE dépôt (jamais dans un fichier).
+            export KEYSTORE_PATH="$RUNNER_TEMP/officielle.jks"
+            echo "$KEYSTORE_B64" | base64 -d > "$KEYSTORE_PATH"
+            export KEYSTORE_PASSWORD="$KEYSTORE_SECRET_PASSWORD"
+            echo "Clé de signature officielle (secrets GitHub) utilisée."
+          elif [ -f "$KEYSTORE_PATH" ]; then
             export KEYSTORE_PASSWORD="$(cat ${{ github.workspace }}/frontend/android-signing/mot-de-passe.txt)"
-            echo "Clé de signature officielle (dépôt privé) utilisée."
+            echo "::warning::Clé lue dans le dépôt frontend (ancienne méthode) : migrez-la vers les secrets ANDROID_KEYSTORE_B64 et ANDROID_KEYSTORE_PASSWORD puis supprimez android-signing/."
           else
             echo "::warning::Jeton CROSS_REPO_TOKEN invalide : clé TEMPORAIRE utilisée. Renouvelez le jeton puis relancez pour une APK signée avec la clé officielle."
             export KEYSTORE_PATH="$RUNNER_TEMP/temporaire.jks"
