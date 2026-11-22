@@ -492,6 +492,54 @@ def _url_avec_token(url_base, token):
     return f"{url_base}{separateur}{urlencode(parametres)}"
 
 
+_LOCAL_PRET = threading.Event()
+
+
+def _surveiller_coupure_internet(config, fenetre):
+    """
+    Mode 2 : la fenêtre affiche le site (Render). Si Internet est coupé EN COURS
+    de session, la page ne peut plus rien charger : les écrans pas encore
+    ouverts restent BLANCS (leurs fichiers viennent du site) et les listes
+    affichent « connexion au serveur impossible ».
+
+    On bascule alors la fenêtre sur le serveur local de ce poste (qui sert
+    l'application ET les données locales). Il faut que le serveur local soit
+    prêt ; on ne bascule qu'après deux échecs consécutifs, pour ne pas réagir
+    à une micro-coupure. Une fois basculé on reste en local : le worker de
+    synchronisation renvoie les documents au retour d'Internet.
+    """
+    import time
+    echecs = 0
+    while True:
+        time.sleep(4)
+        if not _LOCAL_PRET.is_set():
+            continue
+        if internet_disponible(config["serveur_backend"], timeout=3):
+            echecs = 0
+            continue
+        echecs += 1
+        if echecs < 2:
+            continue
+        try:
+            # La page tourne encore : on récupère son jeton pour que la connexion
+            # locale se fasse sans ressaisie (le jeton n'a pas toujours été
+            # enregistré si l'utilisateur était déjà connecté au lancement).
+            try:
+                acces = fenetre.evaluate_js("localStorage.getItem('access_token')")
+                refresh = fenetre.evaluate_js("localStorage.getItem('refresh_token')")
+                if acces:
+                    Api(config).enregistrer_token(acces, refresh)
+            except Exception:
+                pass
+            url_locale = _url_avec_token(DJANGO_LOCAL_URL, _charger_token_local())
+            print("[mode] Internet coupé : bascule de la fenêtre sur le serveur local.")
+            fenetre.load_url(url_locale)
+        except Exception:
+            import traceback
+            traceback.print_exc()
+        return
+
+
 def _preparer_hors_ligne_en_arriere_plan(config):
     """
     Mode 2 (en ligne) : démarre le serveur Django local puis le worker de
@@ -526,6 +574,7 @@ def _preparer_hors_ligne_en_arriere_plan(config):
 
         from sync_worker import demarrer_boucle_synchro
         demarrer_boucle_synchro(config["serveur_backend"], DJANGO_LOCAL_URL, _device_id(config))
+        _LOCAL_PRET.set()
         print("[mode] Serveur local et synchronisation démarrés.")
     except Exception:
         import traceback
@@ -612,6 +661,9 @@ def main():
         # base locale.
         threading.Thread(
             target=_preparer_hors_ligne_en_arriere_plan, args=(config,), daemon=True
+        ).start()
+        threading.Thread(
+            target=_surveiller_coupure_internet, args=(config, fenetre), daemon=True
         ).start()
         webview.start()
         return
