@@ -495,6 +495,22 @@ def _url_avec_token(url_base, token):
 _LOCAL_PRET = threading.Event()
 
 
+def _bandeau_coupure(fenetre, afficher):
+    """Message discret en haut de la page pendant l'attente du serveur local (aucune erreur si la page est morte)."""
+    try:
+        if afficher:
+            fenetre.evaluate_js(
+                "(function(){if(document.getElementById('erp-coupure'))return;var d=document.createElement('div');"
+                "d.id='erp-coupure';d.style.cssText='position:fixed;top:0;left:0;right:0;z-index:2147483647;"
+                "background:#B45309;color:#fff;font:14px Arial;padding:10px;text-align:center';"
+                "d.textContent='Connexion Internet perdue. Passage en mode hors ligne dans quelques instants, ne fermez pas la fenêtre.';"
+                "document.body.appendChild(d);})()")
+        else:
+            fenetre.evaluate_js("(function(){var d=document.getElementById('erp-coupure');if(d)d.remove();})()")
+    except Exception:
+        pass
+
+
 def _surveiller_coupure_internet(config, fenetre):
     """
     Mode 2 : la fenêtre affiche le site (Render). Si Internet est coupé EN COURS
@@ -504,21 +520,30 @@ def _surveiller_coupure_internet(config, fenetre):
 
     On bascule alors la fenêtre sur le serveur local de ce poste (qui sert
     l'application ET les données locales). Il faut que le serveur local soit
-    prêt ; on ne bascule qu'après deux échecs consécutifs, pour ne pas réagir
+    prêt (sinon un message prévient l'utilisateur et la bascule a lieu dès que le serveur local est prêt) ; on ne bascule qu'après deux échecs consécutifs, pour ne pas réagir
     à une micro-coupure. Une fois basculé on reste en local : le worker de
     synchronisation renvoie les documents au retour d'Internet.
     """
     import time
     echecs = 0
+    bandeau = False
     while True:
         time.sleep(4)
-        if not _LOCAL_PRET.is_set():
-            continue
         if internet_disponible(config["serveur_backend"], timeout=3):
             echecs = 0
+            if bandeau:  # Internet est revenu avant la bascule : on retire le message
+                _bandeau_coupure(fenetre, False)
+                bandeau = False
             continue
         echecs += 1
         if echecs < 2:
+            continue
+        if not _LOCAL_PRET.is_set():
+            # Coupure pendant la première minute : le serveur local n'est pas encore prêt. Avant, on ignorait la
+            # coupure (écran blanc). Maintenant on prévient l'utilisateur et on bascule dès que le local est prêt.
+            if not bandeau:
+                _bandeau_coupure(fenetre, True)
+                bandeau = True
             continue
         try:
             # La page tourne encore : on récupère son jeton pour que la connexion
