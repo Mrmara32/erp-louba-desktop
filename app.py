@@ -297,6 +297,25 @@ def demarrer_django_local(host="127.0.0.1"):
     call_command("migrate", interactive=False, verbosity=0)
     print("[offline] Base locale prête.")
 
+    # Sauvegarde automatique locale : une copie vérifiée au plus toutes les 20 h (au démarrage puis en tâche de fond),
+    # gardée 30 jours dans %APPDATA%\\LoubaERP\\sauvegardes. Restaurable depuis Administration > Sauvegarde et restauration.
+    def _sauvegarde_auto_locale():
+        import glob
+        import time
+        dossier = str(_dossier_donnees() / "sauvegardes")
+        os.environ.setdefault("SAUVEGARDE_DOSSIER", dossier)
+        os.environ.setdefault("SAUVEGARDE_CONSERVER_JOURS", "30")
+        while True:
+            try:
+                recentes = [f for f in glob.glob(os.path.join(dossier, "sauvegarde_*.zip*")) if time.time() - os.path.getmtime(f) < 20 * 3600]
+                if not recentes:
+                    call_command("sauvegarde_auto", verbosity=0)
+            except Exception as e:  # ne jamais bloquer l'application pour une sauvegarde
+                print(f"[offline] Sauvegarde automatique impossible : {e}")
+            time.sleep(6 * 3600)
+
+    threading.Thread(target=_sauvegarde_auto_locale, daemon=True).start()
+
     from waitress import serve
     from config.wsgi import application
 
